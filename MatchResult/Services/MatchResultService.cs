@@ -15,56 +15,61 @@ namespace MatchResult.Services
         public string QueryMatchResult(int matchId)
         {
             var rawData = _repository.GetRawData(matchId);
-            
-            return rawData switch
-            {
-                "HA" => "1:1 (First Half)",
-                "HA;H" => "2:1 (Second Half)",
-                _ => "Unknown Result"
-            };
+            return CalculateMatchResult(rawData);
         }
 
         public string UpdateMatchResult(int matchId, Event matchEvent)
         {
             var rawData = _repository.GetRawData(matchId);
-            string updatedResult;
+            string updatedResult = rawData;
 
             switch (matchEvent)
             {
                 case Event.HomeGoal:
-                    updatedResult = rawData + "H";
+                    updatedResult = AppendEvent(updatedResult, 'H');
                     break;
                 case Event.AwayGoal:
-                    updatedResult = rawData + "A";
+                    updatedResult = AppendEvent(updatedResult, 'A');
                     break;
                 case Event.Period:
-                    updatedResult = rawData + ";";
+                    updatedResult = AppendEvent(updatedResult, ';');
                     break;
                 case Event.HomeCancel:
-                    if (rawData.EndsWith("H"))
-                    {
-                        updatedResult = rawData.Substring(0, rawData.Length - 1);
-                    }
-                    else
-                    {
-                        throw new UpdateMatchResultException($"Invalid operation: {matchEvent} on {rawData}");
-                    }
+                    updatedResult = RemoveLastEvent(updatedResult, 'H');
                     break;
                 case Event.AwayCancel:
-                    if (rawData.EndsWith("A") || rawData.EndsWith("A;"))
-                    {
-                        updatedResult = rawData.Remove(rawData.LastIndexOf("A"), 1);
-                    }
-                    else
-                    {
-                        throw new UpdateMatchResultException($"Invalid operation: {matchEvent} on {rawData}");
-                    }
+                    updatedResult = RemoveLastEvent(updatedResult, 'A');
                     break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(matchEvent), matchEvent, null);
             }
 
-            return updatedResult;
+            return CalculateMatchResult(updatedResult);
+        }
+
+        private string AppendEvent(string input, char eventChar)
+        {
+            return input + eventChar;
+        }
+
+        private string RemoveLastEvent(string input, char eventChar)
+        {
+            int index = input.LastIndexOf(eventChar);
+            if (index >= 0)
+            {
+                return input.Remove(index, 1);
+            }
+            throw new UpdateMatchResultException($"Invalid operation: Cannot remove {eventChar} from {input}");
+        }
+
+        private string CalculateMatchResult(string rawData)
+        {
+            int homeGoals = rawData.Count(c => c == 'H');
+            int awayGoals = rawData.Count(c => c == 'A');
+            bool isSecondHalf = rawData.Contains(';');
+
+            string half = isSecondHalf ? "Second Half" : "First Half";
+            return $"{homeGoals}:{awayGoals} ({half})";
         }
     }
 
